@@ -1,14 +1,12 @@
-import praw
+import feedparser
 import os
 import re
 import datetime
+import time
 from telegram import Bot
 import asyncio
 
 # --- Configuration ---
-REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID")
-REDDIT_CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET")
-REDDIT_USER_AGENT = "TacticusCodeBot/1.0"
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID")
 
@@ -27,7 +25,8 @@ IGNORE_LIST = {
     "THANKS", "THANK", "YOU", "GUILD", "RAID", "ARENA", "MODE", "HELP",
     "NEED", "WANT", "LOOK", "FIND", "JOIN", "TEAM", "PLAY", "BEST",
     "META", "TIER", "LIST", "VIEW", "POLL", "VOTE", "MEME", "FLUFF",
-    "NEWS", "INFO", "CHAT", "RULE", "MODS", "USER", "BOTS", "TEST"
+    "NEWS", "INFO", "CHAT", "RULE", "MODS", "USER", "BOTS", "TEST",
+    "HTTP", "HTTPS", "COM", "WWW", "REDDIT", "COMMENTS", "PERMALINK"
 }
 
 def load_known_codes():
@@ -41,6 +40,10 @@ def save_new_code(code):
         f.write(f"{code}\n")
 
 async def send_telegram_message(code, source_url):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL_ID:
+        print(f"Skipping Telegram send (no creds): {code}")
+        return
+
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
     message = f"🆕 **New Tacticus Code Found!**\n\n`{code}`\n\n[Source]({source_url})"
     try:
@@ -50,47 +53,51 @@ async def send_telegram_message(code, source_url):
         print(f"Failed to send message: {e}")
 
 def main():
-    if not all([REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID]):
-        print("Error: Missing environment variables.")
-        return
-
-    reddit = praw.Reddit(
-        client_id=REDDIT_CLIENT_ID,
-        client_secret=REDDIT_CLIENT_SECRET,
-        user_agent=REDDIT_USER_AGENT
-    )
+    if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID]):
+        print("Warning: Missing Telegram environment variables. Bot will only print to console.")
 
     known_codes = load_known_codes()
     print(f"Loaded {len(known_codes)} known codes.")
 
     # Calculate cutoff time (3 days ago)
+    # RSS entries usually have 'published_parsed' struct_time
     cutoff_time = datetime.datetime.utcnow() - datetime.timedelta(days=3)
-    cutoff_timestamp = cutoff_time.timestamp()
 
     for sub_name in TARGET_SUBREDDITS:
-        print(f"Checking r/{sub_name}...")
+        rss_url = f"https://www.reddit.com/r/{sub_name}/new/.rss"
+        print(f"Checking {rss_url}...")
+        
         try:
-            subreddit = reddit.subreddit(sub_name)
-            # Check 'new' posts
-            for post in subreddit.new(limit=20):
-                if post.created_utc < cutoff_timestamp:
-                    break  # Too old
+            feed = feedparser.parse(rss_url)
+            
+            for entry in feed.entries:
+                # Check date
+                if hasattr(entry, 'published_parsed'):
+                    published_dt = datetime.datetime.fromtimestamp(time.mktime(entry.published_parsed))
+                    if published_dt < cutoff_time:
+                        continue # Too old
+                
+                # Combine title and content/summary
+                # Reddit RSS puts the post content in 'content' or 'summary' with HTML
+                content_text = entry.title
+                if hasattr(entry, 'summary'):
+                     content_text += " " + entry.summary
+                
+                # Simple HTML tag strip (rough) because regex runs on text
+                content_text = re.sub('<[^<]+?>', ' ', content_text)
 
-                text_to_search = f"{post.title} {post.selftext}"
-                potential_codes = CODE_PATTERN.findall(text_to_search)
+                potential_codes = CODE_PATTERN.findall(content_text)
 
                 for code in potential_codes:
                     if code in IGNORE_LIST:
                         continue
                     
-                    # Basic heuristic: Codes often have numbers or are distinct words
-                    # Tacticus codes are usually ALL CAPS.
                     if code not in known_codes:
                         # Found a new code!
                         print(f"New Code Found: {code}")
                         
                         # Send to Telegram
-                        asyncio.run(send_telegram_message(code, post.url))
+                        asyncio.run(send_telegram_message(code, entry.link))
                         
                         # Add to known codes
                         known_codes.add(code)
