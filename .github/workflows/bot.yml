@@ -1,0 +1,39 @@
+name: Run Tacticus Bot
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run Bot Script
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+      run: python bot.py
+
+    - name: Commit and Push Changes
+      run: |
+        git config --global user.name 'Tacticus Bot Action'
+        git config --global user.email 'action@github.com'
+        git add known_codes.txt
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Update known codes [skip ci]" && git push)
