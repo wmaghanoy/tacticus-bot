@@ -45,7 +45,7 @@ async def send_telegram_message(code, source_url):
         return
 
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
-    message = f"🆕 **New Tacticus Code Found!**\n\n`{code}`\n\n[Source]({source_url})"
+    message = f"🆕 **New Tacticus Code Found!**\n\n`{code}`"
     try:
         await bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode='Markdown')
         print(f"Sent code to Telegram: {code}")
