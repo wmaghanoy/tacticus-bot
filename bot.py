@@ -45,9 +45,10 @@ async def send_telegram_message(code, source_url):
         return
 
     bot = Bot(token=TELEGRAM_BOT_TOKEN)
-    message = f"🆕 **New Tacticus Code Found!**\n\n`{code}`"
+    # MODIFIED: Showing source link again, but disabling preview
+    message = f"🆕 **New Tacticus Code Found!**\n\n`{code}`\n\n[Source]({source_url})"
     try:
-        await bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode='Markdown')
+        await bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode='Markdown', disable_web_page_preview=True)
         print(f"Sent code to Telegram: {code}")
     except Exception as e:
         print(f"Failed to send message: {e}")
@@ -94,7 +95,7 @@ def main():
                     
                     if code not in known_codes:
                         # Found a new code!
-                        print(f"New Code Found: {code}")
+                        print(f"New Code Found: {code} from {entry.link}")
                         
                         # Send to Telegram
                         asyncio.run(send_telegram_message(code, entry.link))
