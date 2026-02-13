@@ -3,12 +3,15 @@ import os
 import re
 import datetime
 import time
+import requests
 from telegram import Bot
 import asyncio
 
 # --- Configuration ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID")
+DISCORD_USER_TOKEN = os.environ.get("DISCORD_USER_TOKEN")
+DISCORD_CHANNEL_ID = os.environ.get("DISCORD_CHANNEL_ID")
 
 TARGET_SUBREDDITS = ["Tacticus_Codes", "WarhammerTacticus"]
 KNOWN_CODES_FILE = "known_codes.txt"
@@ -53,6 +56,49 @@ async def send_telegram_message(code, source_url):
     except Exception as e:
         print(f"Failed to send message: {e}")
 
+def check_discord(known_codes):
+    """
+    Polls the Discord Channel API using a User Token.
+    Returns: None (updates known_codes in place)
+    """
+    if not DISCORD_USER_TOKEN or not DISCORD_CHANNEL_ID:
+        print("Skipping Discord check (no secrets provided).")
+        return
+
+    url = f"https://discord.com/api/v9/channels/{DISCORD_CHANNEL_ID}/messages?limit=10"
+    headers = {"Authorization": DISCORD_USER_TOKEN}
+
+    print(f"Checking Discord Channel {DISCORD_CHANNEL_ID}...")
+    try:
+        r = requests.get(url, headers=headers)
+        if r.status_code != 200:
+            print(f"Discord Error {r.status_code}: {r.text}")
+            return
+        
+        # Messages from newest to oldest
+        messages = r.json()
+        
+        for msg in messages:
+            content = msg.get('content', '')
+            
+            potential_codes = CODE_PATTERN.findall(content)
+            
+            for code in potential_codes:
+                if code in IGNORE_LIST:
+                    continue
+                
+                if code not in known_codes:
+                    print(f"New Code Found via Discord: {code}")
+                    # Construct a jump link
+                    msg_link = f"https://discord.com/channels/@me/{DISCORD_CHANNEL_ID}/{msg['id']}"
+                    
+                    asyncio.run(send_telegram_message(code, msg_link))
+                    known_codes.add(code)
+                    save_new_code(code)
+
+    except Exception as e:
+        print(f"Error checking Discord: {e}")
+
 def main():
     if not all([TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID]):
         print("Warning: Missing Telegram environment variables. Bot will only print to console.")
@@ -64,6 +110,10 @@ def main():
     # RSS entries usually have 'published_parsed' struct_time
     cutoff_time = datetime.datetime.utcnow() - datetime.timedelta(days=3)
 
+    # 1. Check Discord
+    check_discord(known_codes)
+
+    # 2. Check Reddit
     for sub_name in TARGET_SUBREDDITS:
         rss_url = f"https://www.reddit.com/r/{sub_name}/new/.rss"
         print(f"Checking {rss_url}...")
