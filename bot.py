@@ -16,12 +16,12 @@ DISCORD_CHANNEL_ID = os.environ.get("DISCORD_CHANNEL_ID")
 TARGET_SUBREDDITS = ["Tacticus_Codes", "WarhammerTacticus"]
 KNOWN_CODES_FILE = "known_codes.txt"
 
-# Regex for potential codes: Uppercase alphanumeric, 4-20 chars
-CODE_PATTERN = re.compile(r'\b[A-Z0-9]{4,20}\b')
+# Regex: Uppercase alphanumeric, 4-20 chars, MUST contain at least one letter (no pure numbers)
+CODE_PATTERN = re.compile(r'\b(?=[A-Z0-9]*[A-Z])[A-Z0-9]{4,20}\b')
 
 # Words to ignore (Common false positives)
 IGNORE_LIST = {
-    "CODE", "REDDIT", "TACTICUS", "WARHAMMER", "DISCORD", "LINK", "GAME", 
+    "CODE", "CODES", "REDDIT", "TACTICUS", "WARHAMMER", "DISCORD", "LINK", "GAME", 
     "FREE", "REWARD", "ANDROID", "IPHONE", "MOBILE", "UPDATE", "PATCH",
     "NOTES", "HAVE", "BEEN", "THIS", "THAT", "WITH", "FROM", "POST",
     "THEY", "YOUR", "WILL", "JUST", "LIKE", "GOOD", "LUCK", "GUYS",
@@ -29,7 +29,10 @@ IGNORE_LIST = {
     "NEED", "WANT", "LOOK", "FIND", "JOIN", "TEAM", "PLAY", "BEST",
     "META", "TIER", "LIST", "VIEW", "POLL", "VOTE", "MEME", "FLUFF",
     "NEWS", "INFO", "CHAT", "RULE", "MODS", "USER", "BOTS", "TEST",
-    "HTTP", "HTTPS", "COM", "WWW", "REDDIT", "COMMENTS", "PERMALINK"
+    "HTTP", "HTTPS", "COM", "WWW", "REDDIT", "COMMENTS", "PERMALINK",
+    "REFERRAL", "REFERRALS", "VIDEO", "YOUTUBE", "SHARDS", "GOLD", "BLACKSTONE",
+    "UPDATED", "WORKING", "ITEMS", "REQUISITION", "ORDERS", "PLAYERS", "NEWEST", "TOP",
+    "ALL", "AND", "FOR", "OLD", "NEW"
 }
 
 def load_known_codes():
@@ -80,6 +83,7 @@ def check_discord(known_codes):
         
         for msg in messages:
             content = msg.get('content', '')
+            
             
             potential_codes = CODE_PATTERN.findall(content)
             
