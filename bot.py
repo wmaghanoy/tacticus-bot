@@ -35,6 +35,13 @@ IGNORE_LIST = {
     "ALL", "AND", "FOR", "OLD", "NEW"
 }
 
+# Phrases that indicate a post/message is likely unrelated to global codes (e.g. guild recruitment)
+CONTEXT_IGNORE_PHRASES = {
+    "guild code", "guild tag", "join code", "friend code", "referral code", 
+    "recruitment", "recruiting", "looking for players", "looking for members",
+    "join my guild", "join our guild", "guild id", "invite code"
+}
+
 def load_known_codes():
     if not os.path.exists(KNOWN_CODES_FILE):
         return set()
@@ -83,6 +90,11 @@ def check_discord(known_codes):
         
         for msg in messages:
             content = msg.get('content', '')
+            
+            # Check context to ignore likely guild/referral posts
+            content_lower = content.lower()
+            if any(phrase in content_lower for phrase in CONTEXT_IGNORE_PHRASES):
+                continue
             
             
             potential_codes = CODE_PATTERN.findall(content)
@@ -140,6 +152,11 @@ def main():
                 
                 # Simple HTML tag strip (rough) because regex runs on text
                 content_text = re.sub('<[^<]+?>', ' ', content_text)
+
+                # Check context to ignore likely guild/referral posts
+                content_lower = content_text.lower()
+                if any(phrase in content_lower for phrase in CONTEXT_IGNORE_PHRASES):
+                    continue
 
                 potential_codes = CODE_PATTERN.findall(content_text)
 
