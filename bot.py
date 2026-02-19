@@ -122,67 +122,65 @@ def main():
     known_codes = load_known_codes()
     print(f"Loaded {len(known_codes)} known codes.")
 
-    while True:
-        print(f"\n--- Starting Scan at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
+    print(f"--- Starting Scan at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ---")
 
-        # Calculate cutoff time (3 days ago)
-        # RSS entries usually have 'published_parsed' struct_time
-        cutoff_time = datetime.datetime.utcnow() - datetime.timedelta(days=3)
+    # Calculate cutoff time (3 days ago)
+    # RSS entries usually have 'published_parsed' struct_time
+    cutoff_time = datetime.datetime.utcnow() - datetime.timedelta(days=3)
 
-        # 1. Check Discord
-        check_discord(known_codes)
+    # 1. Check Discord
+    check_discord(known_codes)
 
-        # 2. Check Reddit
-        for sub_name in TARGET_SUBREDDITS:
-            rss_url = f"https://www.reddit.com/r/{sub_name}/new/.rss"
-            print(f"Checking {rss_url}...")
+    # 2. Check Reddit
+    for sub_name in TARGET_SUBREDDITS:
+        rss_url = f"https://www.reddit.com/r/{sub_name}/new/.rss"
+        print(f"Checking {rss_url}...")
+        
+        try:
+            feed = feedparser.parse(rss_url)
             
-            try:
-                feed = feedparser.parse(rss_url)
+            for entry in feed.entries:
+                # Check date
+                if hasattr(entry, 'published_parsed'):
+                    published_dt = datetime.datetime.fromtimestamp(time.mktime(entry.published_parsed))
+                    if published_dt < cutoff_time:
+                        continue # Too old
                 
-                for entry in feed.entries:
-                    # Check date
-                    if hasattr(entry, 'published_parsed'):
-                        published_dt = datetime.datetime.fromtimestamp(time.mktime(entry.published_parsed))
-                        if published_dt < cutoff_time:
-                            continue # Too old
-                    
-                    # Combine title and content/summary
-                    # Reddit RSS puts the post content in 'content' or 'summary' with HTML
-                    content_text = entry.title
-                    if hasattr(entry, 'summary'):
-                         content_text += " " + entry.summary
-                    
-                    # Simple HTML tag strip (rough) because regex runs on text
-                    content_text = re.sub('<[^<]+?>', ' ', content_text)
+                # Combine title and content/summary
+                # Reddit RSS puts the post content in 'content' or 'summary' with HTML
+                content_text = entry.title
+                if hasattr(entry, 'summary'):
+                        content_text += " " + entry.summary
+                
+                # Simple HTML tag strip (rough) because regex runs on text
+                content_text = re.sub('<[^<]+?>', ' ', content_text)
 
-                    # Check context to ignore likely guild/referral posts
-                    content_lower = content_text.lower()
-                    if any(phrase in content_lower for phrase in CONTEXT_IGNORE_PHRASES):
+                # Check context to ignore likely guild/referral posts
+                content_lower = content_text.lower()
+                if any(phrase in content_lower for phrase in CONTEXT_IGNORE_PHRASES):
+                    continue
+
+                potential_codes = CODE_PATTERN.findall(content_text)
+
+                for code in potential_codes:
+                    if code in IGNORE_LIST:
                         continue
-
-                    potential_codes = CODE_PATTERN.findall(content_text)
-
-                    for code in potential_codes:
-                        if code in IGNORE_LIST:
-                            continue
+                    
+                    if code not in known_codes:
+                        # Found a new code!
+                        print(f"New Code Found: {code} from {entry.link}")
                         
-                        if code not in known_codes:
-                            # Found a new code!
-                            print(f"New Code Found: {code} from {entry.link}")
-                            
-                            # Send to Telegram
-                            asyncio.run(send_telegram_message(code, entry.link))
-                            
-                            # Add to known codes
-                            known_codes.add(code)
-                            save_new_code(code)
+                        # Send to Telegram
+                        asyncio.run(send_telegram_message(code, entry.link))
+                        
+                        # Add to known codes
+                        known_codes.add(code)
+                        save_new_code(code)
 
-            except Exception as e:
-                print(f"Error checking {sub_name}: {e}")
+        except Exception as e:
+            print(f"Error checking {sub_name}: {e}")
 
-        print("Scan complete. Sleeping for 15 minutes...")
-        time.sleep(900)
+    print("Scan complete.")
 
 if __name__ == "__main__":
     main()
